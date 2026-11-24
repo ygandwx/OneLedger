@@ -1,0 +1,262 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           Int       @id @default(1)
+  username     String    @unique
+  passwordHash String
+  totpSecret   String
+  lastTotpStep Int       @default(-1)
+  sessions     Session[]
+}
+
+model Session {
+  id        String   @id
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
+
+model LoginLimit {
+  id       String   @id
+  failures Int      @default(0)
+  until    DateTime
+}
+
+model Entity {
+  id             String          @id @default(cuid())
+  type           String
+  name           String
+  currency       String          @default("CNY")
+  notes          String          @default("")
+  archived       Boolean         @default(false)
+  profile        CompanyProfile?
+  cards          Card[]
+  accounts       Account[]
+  paidExpenses   Expense[]       @relation("Payer")
+  ownedExpenses  Expense[]       @relation("Owner")
+  recurringItems RecurringItem[]
+  files          StoredFile[]
+}
+
+model CompanyProfile {
+  entityId           String  @id
+  entity             Entity  @relation(fields: [entityId], references: [id], onDelete: Restrict)
+  fullName           String
+  jurisdiction       String  @default("")
+  registrationNumber String  @default("")
+  incorporationDate  String?
+  registeredAddress  String  @default("")
+  officeAddress      String  @default("")
+  fiscalYearEnd      String?
+  directors          String  @default("")
+  shareholders       String  @default("")
+  secretaryCompany   String  @default("")
+  notes              String  @default("")
+}
+
+model Card {
+  id             String          @id @default(cuid())
+  entityId       String
+  entity         Entity          @relation(fields: [entityId], references: [id], onDelete: Restrict)
+  type           String
+  name           String
+  issuer         String          @default("")
+  last4          String?
+  currency       String
+  expiresOn      String?
+  status         String          @default("正常")
+  replacementId  String?
+  replacement    Card?           @relation("Replacement", fields: [replacementId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  replacedCards  Card[]          @relation("Replacement")
+  creditLimit    BigInt?
+  statementDay   Int?
+  paymentDay     Int?
+  annualFee      BigInt?
+  annualFeeDate  String?
+  notes          String          @default("")
+  archived       Boolean         @default(false)
+  logs           CardStatusLog[]
+  bindings       Binding[]
+  expenses       Expense[]
+  recurringItems RecurringItem[]
+}
+
+model CardStatusLog {
+  id        String   @id @default(cuid())
+  cardId    String
+  card      Card     @relation(fields: [cardId], references: [id], onDelete: Restrict)
+  oldStatus String
+  newStatus String
+  changedAt DateTime @default(now())
+  reason    String   @default("")
+
+  @@index([cardId, changedAt])
+}
+
+model Website {
+  id             String          @id @default(cuid())
+  name           String
+  url            String          @default("")
+  notes          String          @default("")
+  archived       Boolean         @default(false)
+  accounts       Account[]
+  expenses       Expense[]
+  recurringItems RecurringItem[]
+}
+
+model Account {
+  id             String          @id @default(cuid())
+  websiteId      String
+  website        Website         @relation(fields: [websiteId], references: [id], onDelete: Restrict)
+  entityId       String
+  entity         Entity          @relation(fields: [entityId], references: [id], onDelete: Restrict)
+  identifier     String
+  status         String          @default("正常")
+  notes          String          @default("")
+  archived       Boolean         @default(false)
+  bindings       Binding[]
+  expenses       Expense[]
+  recurringItems RecurringItem[]
+
+  @@unique([websiteId, entityId, identifier])
+}
+
+model Binding {
+  id        String  @id @default(cuid())
+  accountId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  cardId    String
+  card      Card    @relation(fields: [cardId], references: [id], onDelete: Restrict)
+  startDate String
+  endDate   String?
+
+  @@index([cardId, endDate])
+}
+
+model Category {
+  id       String    @id @default(cuid())
+  name     String    @unique
+  expenses Expense[]
+}
+
+model Expense {
+  id               String         @id @default(cuid())
+  date             String
+  websiteId        String?
+  website          Website?       @relation(fields: [websiteId], references: [id], onDelete: Restrict)
+  accountId        String?
+  account          Account?       @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  cardId           String?
+  card             Card?          @relation(fields: [cardId], references: [id], onDelete: Restrict)
+  payerId          String
+  payer            Entity         @relation("Payer", fields: [payerId], references: [id], onDelete: Restrict)
+  ownerId          String
+  owner            Entity         @relation("Owner", fields: [ownerId], references: [id], onDelete: Restrict)
+  originalAmount   BigInt
+  originalCurrency String
+  bookedAmount     BigInt
+  bookedCurrency   String
+  fee              BigInt         @default(0)
+  orderNumber      String         @default("")
+  categoryId       String
+  category         Category       @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  status           String
+  refundOfId       String?
+  refundOf         Expense?       @relation("Refund", fields: [refundOfId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  refunds          Expense[]      @relation("Refund")
+  recurringId      String?
+  recurring        RecurringItem? @relation(fields: [recurringId], references: [id], onDelete: Restrict)
+  occurrenceDate   String?
+  invoiceStatus    String         @default("未取得")
+  settled          Boolean        @default(false)
+  rateOverride     String?
+  notes            String         @default("")
+  deleted          Boolean        @default(false)
+  createdAt        DateTime       @default(now())
+  files            StoredFile[]
+
+  @@unique([recurringId, occurrenceDate])
+  @@index([date, deleted, status])
+}
+
+model RecurringItem {
+  id             String       @id @default(cuid())
+  type           String
+  title          String
+  entityId       String
+  entity         Entity       @relation(fields: [entityId], references: [id], onDelete: Restrict)
+  websiteId      String?
+  website        Website?     @relation(fields: [websiteId], references: [id], onDelete: Restrict)
+  accountId      String?
+  account        Account?     @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  cardId         String?
+  card           Card?        @relation(fields: [cardId], references: [id], onDelete: Restrict)
+  amount         BigInt?
+  currency       String?
+  frequency      String
+  intervalMonths Int          @default(1)
+  anchorDay      Int
+  nextDue        String
+  reminderDays   String       @default("7,1")
+  autoGenerate   Boolean      @default(false)
+  status         String       @default("有效")
+  notes          String       @default("")
+  expenses       Expense[]
+  files          StoredFile[]
+
+  @@index([status, nextDue])
+}
+
+model StoredFile {
+  id           String         @id @default(cuid())
+  entityId     String
+  entity       Entity         @relation(fields: [entityId], references: [id], onDelete: Restrict)
+  category     String
+  title        String
+  expiresOn    String?
+  expenseId    String?
+  expense      Expense?       @relation(fields: [expenseId], references: [id], onDelete: Restrict)
+  recurringId  String?
+  recurring    RecurringItem? @relation(fields: [recurringId], references: [id], onDelete: Restrict)
+  path         String         @unique
+  originalName String
+  size         Int
+  mimeType     String
+  uploadedAt   DateTime       @default(now())
+  archived     Boolean        @default(false)
+}
+
+model ExchangeRate {
+  id     String @id @default(cuid())
+  date   String
+  base   String
+  quote  String
+  rate   String
+  source String
+
+  @@unique([date, base, quote])
+  @@index([base, quote, date])
+}
+
+model Notification {
+  id         String    @id @default(cuid())
+  itemType   String
+  itemId     String
+  dueDate    String
+  daysBefore Int
+  channel    String
+  message    String
+  sentAt     DateTime?
+  read       Boolean   @default(false)
+
+  @@unique([itemType, itemId, dueDate, daysBefore, channel])
+}
