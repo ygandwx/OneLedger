@@ -55,6 +55,6 @@ export function ExpenseEditor({ id, initial, options, generated }: { id: string 
       <label>备注<textarea name="notes" value={draft.notes} onChange={e => set({ notes: e.target.value })} /></label>
     </div></section>
     {error && <p role="alert" className="notice">{error}</p>}
-    <div className="actions"><button disabled={pending}>{pending ? "保存中…" : "保存支出"}</button><Link className="secondary btn" href="/expenses">取消</Link></div>
+    <div className="actions"><button disabled={pending}>{pending ? "保存中…" : "保存支出"}</button><button className="secondary" name="afterSave" value="attach" disabled={pending}>保存并添加附件</button><Link className="secondary btn" href="/expenses">取消</Link></div>
   </form>;
 }

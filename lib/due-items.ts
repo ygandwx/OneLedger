@@ -41,6 +41,6 @@ export async function dueEvents(today: string, horizon: number, forReminder = fa
     if (card.expiresOn) push("卡片到期", card.id, card.expiresOn, card.name + " · 到期", card.entity.name, "/records?tab=cards&edit=" + card.id)
   }
   for (const file of files) if (file.expiresOn)
-    push("文件到期", file.id, file.expiresOn, file.title + " · 到期", file.entity.name, "/files")
+    push("文件到期", file.id, file.expiresOn, file.title + " · 到期", file.entity.name, "/files?edit=" + file.id)
   return result.sort((a,b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title, "zh"))
 }

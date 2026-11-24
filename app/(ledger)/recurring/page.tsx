@@ -19,6 +19,7 @@ export default async function RecurringPage({ searchParams }: { searchParams: Pr
   ]) : null
   return <><header className="actions"><h1>周期事项</h1><a className="btn" href="/recurring?new=1">新增事项</a></header>
     {q.error && <p className="panel" role="alert">{q.error}</p>}
+    {edit && <p><a href={"/files?recurringId="+edit.id}>事项文件</a></p>}
     {options && <form action={saveRecurring} className="panel">
       <h2>{edit ? "编辑事项" : "新增周期事项"}</h2>
       <input type="hidden" name="id" value={edit?.id ?? ""}/><input type="hidden" name="priorDue" value={edit?.nextDue ?? ""}/>

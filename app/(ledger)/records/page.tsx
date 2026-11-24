@@ -99,7 +99,7 @@ export default async function Records({searchParams}:{searchParams:Promise<Query
         <div className="grid">
           {tab === "entities" && <>
             <Input label="名称" name="name" required defaultValue={entity?.name}/>
-            <Select label="类型" name="type" options={["个人","公司"]} value={entity?.type || "个人"}/>
+            <Select label="类型" name="type" options={["个人","公司"]} value={entity?.type || (query.type === "company" ? "公司" : "个人")}/>
             <Select label="默认币种" name="currency" options={currencies} value={entity?.currency || "CNY"}/>
           </>}
           {tab === "websites" && <>

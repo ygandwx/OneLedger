@@ -40,21 +40,24 @@ docker compose cp app:/data/backups/oneledger-实际时间.tar.gz ./restore.tar.
 
 ### 从备份恢复
 
-在含有效 .env 的仓库目录操作。以下命令适用于默认数据库路径 /data/ledger.db。先检查归档，再停掉 app，并把现有数据库、WAL 和附件移入独立目录。保留该目录直至恢复验证完成。
+在含有效 .env 的仓库目录操作。以下命令适用于默认数据库路径 /data/ledger.db。先检查归档，再停掉 app。下面的命令先在临时目录解包并检查文件，再把现有数据库、WAL 和附件移到 before-restore 目录。保留该目录直至恢复验证完成。
 
 ```sh
 tar -tzf restore.tar.gz
 docker compose stop app
-docker compose run --rm --no-deps -v "$PWD/restore.tar.gz:/tmp/restore.tar.gz:ro" app sh -ec '
+docker compose run --rm -T --no-deps app sh -ec '
   cd /data
+  staged=$(mktemp -d /data/restore-staging-XXXXXX)
+  tar -xzf - -C "$staged"
+  test -s "$staged/ledger.db"
+  test -d "$staged/uploads"
   previous=$(mktemp -d /data/before-restore-XXXXXX)
   for item in ledger.db ledger.db-wal ledger.db-shm uploads; do
     if [ -e "$item" ]; then mv "$item" "$previous/"; fi
   done
-  tar -xzf /tmp/restore.tar.gz -C /data
-  test -f ledger.db
-  test -d uploads
-'
+  mv "$staged/ledger.db" "$staged/uploads" /data/
+  rmdir "$staged"
+' < ./restore.tar.gz
 docker compose up -d app
 ```
 
@@ -65,3 +68,11 @@ docker compose up -d app
 在「周期事项」新建订阅或年度事项，选择提醒天数（例如 7,1）。到期当天也会提醒；每日任务按原定日推算下期，小月取月末。启用自动生成后，待确认扣款会显示在首页。只提醒的事项可在列表中手动完成本期。
 
 站内通知可在「设置与通知」查看。若启用 Telegram，先在 Telegram 中向自己的机器人发起对话，设置 TELEGRAM_BOT_TOKEN 和 TELEGRAM_CHAT_ID，重新创建 app 服务后使用设置页的测试按钮。每日消息按业务日期合并，发送失败将在下次运行重试。
+
+## 公司档案与附件
+
+「公司档案」保存注册、地址、财年及董事股东资料。可从公司档案、周期事项或支出记录进入关联文件；录入支出时可选「保存并添加附件」。每个附件最多 25 MiB，保存在 /data/uploads，通过登录后的预览或下载链接访问。生产部署请妥善保管 .env、数据卷及备份，备份内包含账号的 TOTP 密钥和财务资料。
+
+## 运行测试
+
+`npm test` 覆盖金额最小单位、汇率回退及交叉换算、月末与闰年、还款跨月、报表净额和垫付口径。

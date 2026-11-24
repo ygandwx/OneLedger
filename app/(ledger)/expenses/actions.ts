@@ -56,9 +56,10 @@ function friendlyError(error: unknown) {
 
 export async function saveExpense(id: string | null, _: string, form: FormData) {
   await requireUser();
+  let savedId: string;
   try {
     const data = await readExpense(form);
-    await db.$transaction(async tx => {
+    savedId = await db.$transaction(async tx => {
       const current = id ? await tx.expense.findFirst({ where: { id, deleted: false }, include: { refunds: { where: { deleted: false }, select: { id: true }, take: 1 } } }) : null;
       if (id && !current) throw new Error("这笔支出已删除");
       if (current?.refundOfId || current?.refunds.length) throw new Error("此记录已关联退款，请先撤销退款再编辑");
@@ -75,12 +76,12 @@ export async function saveExpense(id: string | null, _: string, form: FormData) 
       if (!card && (!current?.recurringId || data.cardId)) throw new Error("请选择支付工具");
       if ((website?.archived && website.id !== current?.websiteId) || (card?.archived && card.id !== current?.cardId)) throw new Error("所选资料已归档");
       if (current?.occurrenceDate && data.recurringId !== current.recurringId) throw new Error("自动生成的支出必须保留其周期事项");
-      if (id) await tx.expense.update({ where: { id }, data });
-      else await tx.expense.create({ data });
+      const saved = id ? await tx.expense.update({ where: { id }, data }) : await tx.expense.create({ data });
+      return saved.id;
     });
   } catch (error) { return friendlyError(error); }
   expenseChanged();
-  redirect("/expenses");
+  redirect(form.get("afterSave") === "attach" ? "/files?expenseId=" + savedId : "/expenses");
 }
 
 export async function refundExpense(id: string) {
