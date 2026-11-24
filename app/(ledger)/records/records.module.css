@@ -1,0 +1,18 @@
+.tabs {
+  display: flex;
+  flex-flow: row wrap;
+  gap: .375rem;
+  margin-bottom: 1.25rem;
+}
+.tabs a {
+  padding: .375rem .8rem;
+  border-radius: .375rem;
+  color: var(--green);
+}
+.tabs a:hover,
+.tabs a[aria-current="page"] {
+  background: #dfece3;
+}
+.tabs a[aria-current="page"] {
+  font-weight: 650;
+}
