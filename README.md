@@ -26,3 +26,36 @@ npm run dev
 ```
 
 打开 http://localhost:3000。生产验证使用 `npm run build` 与 `npm start`。完整需求见 [docs/SPEC.md](docs/SPEC.md)，实现约定见 [docs/DECISIONS.md](docs/DECISIONS.md)。
+
+## 报表、汇率和备份
+
+在「汇率」中获取行情或录入手动报价，再到「报表」选择交易期间、主体、币种及分组，导出当前筛选的 CSV。汇率来源为 [Frankfurter v2](https://frankfurter.dev/)。FX_CRON、BACKUP_CRON、REMINDER_CRON 均采用 TZ 时区，修改 .env 后运行 `docker compose up -d --force-recreate app`。
+
+每天默认 03:30 执行 SQLite `VACUUM INTO`，归档数据库快照和 uploads 到 /data/backups，成功后保留最近 30 份。应定期将压缩包另存到 VPS 以外的位置。以下命令列出备份并复制一份到宿主机；把示例文件名替换为实际文件名。
+
+```sh
+docker compose exec app ls -lh /data/backups
+docker compose cp app:/data/backups/oneledger-实际时间.tar.gz ./restore.tar.gz
+```
+
+### 从备份恢复
+
+在含有效 .env 的仓库目录操作。以下命令适用于默认数据库路径 /data/ledger.db。先检查归档，再停掉 app，并把现有数据库、WAL 和附件移入独立目录。保留该目录直至恢复验证完成。
+
+```sh
+tar -tzf restore.tar.gz
+docker compose stop app
+docker compose run --rm --no-deps -v "$PWD/restore.tar.gz:/tmp/restore.tar.gz:ro" app sh -ec '
+  cd /data
+  previous=$(mktemp -d /data/before-restore-XXXXXX)
+  for item in ledger.db ledger.db-wal ledger.db-shm uploads; do
+    if [ -e "$item" ]; then mv "$item" "$previous/"; fi
+  done
+  tar -xzf /tmp/restore.tar.gz -C /data
+  test -f ledger.db
+  test -d uploads
+'
+docker compose up -d app
+```
+
+恢复后用备份时的账号及 TOTP 登录，核对一笔交易并下载其附件。若需回退，先停止 app，再将恢复出的数据库、WAL 和 uploads 移出数据目录，将 before-restore 目录中原有的文件移回原位。

@@ -1,4 +1,5 @@
 import cron from "node-cron";
+import { backupDatabase } from "./backup";
 import { syncRates } from "./rates";
 
 const state = globalThis as typeof globalThis & { ledgerJobsStarted?: boolean };
@@ -6,6 +7,7 @@ export function startJobs() {
   if (state.ledgerJobsStarted) return;
   const timezone = process.env.TZ || "Asia/Shanghai";
   const jobs: [string, string, () => Promise<unknown>][] = [
+    ["备份账本", process.env.BACKUP_CRON || "30 3 * * *", backupDatabase],
     ["更新汇率", process.env.FX_CRON || "15 9 * * *", () => syncRates()],
   ];
   for (const [name, expression] of jobs) {
