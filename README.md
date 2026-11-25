@@ -15,6 +15,14 @@ openssl rand -hex 32
 
 将生成的随机值填入 .env 的 SETUP_TOKEN，并设置 DOMAIN。运行 `docker compose up -d --build`，通过 HTTPS 打开域名，使用初始化口令创建账号并设置验证器。账号创建后初始化页自动关闭。Caddy 负责签发和续签证书。应用仅在 Compose 内部网络监听。数据库、上传文件和备份使用持久卷 ledger_data。
 
+## 绑定验证器与登录
+
+首次打开初始化页，先输入 SETUP_TOKEN，再为账本设置用户名、密码，向验证器添加页面显示的密钥。使用基于时间的 SHA-1、6 位数字、30 秒周期。在同一浏览器内，刷新或输错验证码后可继续使用这次绑定的密钥，有效期为 30 分钟。
+
+建账成功后会自动进入账本。每组验证码只能成功使用一次；若立即退出，请等验证器换到下一组数字再登录。若多轮新码仍提示无效，请核对建账时的用户名和密码，选择当时成功绑定的 OneLedger 条目，并确认手机与 VPS 的系统时间已同步。若触发尝试次数限制，请等待 15 分钟再试。
+
+已有部署可在仓库目录中运行 `git pull --ff-only` 和 `docker compose up -d --build app` 更新。升级沿用已有账号、验证器密钥和账本数据。
+
 ## 本地开发
 
 使用 Node.js 24。复制 .env.example 为 .env，将 DATABASE_URL 改为 file:/绝对路径/data/ledger.db，DATA_DIR 改为同一绝对目录，手动创建该目录。仅本机 HTTP 调试时设 COOKIE_SECURE=false。填入 SETUP_TOKEN，再运行：
