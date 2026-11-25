@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client"
 import { db } from "@/lib/db"
 import { todayLocal } from "@/lib/calendar"
 import { convertMinor } from "@/lib/money"
@@ -27,12 +28,12 @@ function describe(event: DueEvent) {
   return `${event.date}（${when}）${event.entity} · ${event.title}`
 }
 
-async function saveReminders(today: string, events: DueEvent[]) {
+async function saveReminders(tx: Prisma.TransactionClient, today: string, events: DueEvent[]) {
   if (!events.length) return
   const now = new Date()
   const notices = events.map(event => {
     const key = { itemType: event.kind, itemId: event.id, dueDate: event.date, daysBefore: event.daysBefore, channel: "站内" }
-    return db.notification.upsert({ where: { itemType_itemId_dueDate_daysBefore_channel: key },
+    return tx.notification.upsert({ where: { itemType_itemId_dueDate_daysBefore_channel: key },
       create: { ...key, message: describe(event), sentAt: now }, update: {} })
   })
   if (telegramConfigured()) {
@@ -47,10 +48,10 @@ async function saveReminders(today: string, events: DueEvent[]) {
       message += line
     }
     const key = { itemType: "每日汇总", itemId: today, dueDate: today, daysBefore: 0, channel: "Telegram" }
-    notices.push(db.notification.upsert({ where: { itemType_itemId_dueDate_daysBefore_channel: key },
+    notices.push(tx.notification.upsert({ where: { itemType_itemId_dueDate_daysBefore_channel: key },
       create: { ...key, message, sentAt: null }, update: {} }))
   }
-  await db.$transaction(notices)
+  await Promise.all(notices)
 }
 
 async function deliverBatches() {
@@ -70,8 +71,8 @@ async function generateDue(today: string) {
     while (due && due <= today) {
       const current: string = due
       const next: string | null = followingDue(current, item.frequency, item.intervalMonths, item.anchorDay)
-      const currency = item.currency || item.card?.currency || item.entity.currency
-      const booked = item.card?.currency || currency
+      const currency = item.currency || item.entity.currency
+      const booked = item.card?.currency || item.entity.currency
       const amount = item.amount ?? 0n
       const rate = booked === currency ? "1" : await lookupRate(current, currency, booked)
       const updated = await db.$transaction(async tx => {
@@ -93,9 +94,11 @@ async function generateDue(today: string) {
 }
 
 async function processDaily(today: string) {
-  // Persist due-day reminders before advancing the due dates.
-  const events = await dueEvents(today, 365, true)
-  await saveReminders(today, events)
+  // Read and persist events together so deleting a tool cannot orphan its first reminder.
+  await db.$transaction(async tx => {
+    const events = await dueEvents(today, 365, true, tx)
+    await saveReminders(tx, today, events)
+  }, { timeout: 30000 })
   await generateDue(today)
   await deliverBatches()
 }

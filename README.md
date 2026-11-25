@@ -37,6 +37,12 @@ npm run dev
 
 打开 http://localhost:3000。生产验证使用 `npm run build` 与 `npm start`。完整需求见 [docs/SPEC.md](docs/SPEC.md)，实现约定见 [docs/DECISIONS.md](docs/DECISIONS.md)。
 
+## 基础资料与多币种记账
+
+在「基础资料」的主体、网站、账号、支付工具和绑卡记录列表，每行可直接编辑或删除。点击「删除」会先显示记录名称，确认后才会移除。有关联历史时，页面会列出原因，可归档资料或结束仍在使用的绑定。
+
+信用卡可维护额度、账单日、还款日和年费。主体的默认币种用于预填支出原币，支付工具的默认支付币种用于预填入账币种。实际交易可分别选择两种币种。例如，公司默认 CNY、卡默认 USD，仍可将一笔交易记为 EUR 原币、HKD 入账。修改默认值后，已记录的支出和退款继续使用各自记录的币种。
+
 ## 报表、汇率和备份
 
 在「汇率」中获取行情或录入手动报价，再到「报表」选择交易期间、主体、币种及分组，导出当前筛选的 CSV。汇率来源为 [Frankfurter v2](https://frankfurter.dev/)。FX_CRON、BACKUP_CRON、REMINDER_CRON 均采用 TZ 时区，修改 .env 后运行 `docker compose up -d --force-recreate app`。

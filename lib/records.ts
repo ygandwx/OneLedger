@@ -15,3 +15,25 @@ export const accountStatuses = ["正常", "暂停", "停用"];
 export function recordType(value: string): RecordType {
   return Object.hasOwn(recordTypes, value) ? value as RecordType : "entities";
 }
+
+export const creditFields = ["creditLimit", "statementDay", "paymentDay", "annualFee", "annualFeeDate"] as const;
+
+type Terms = {
+  creditLimit: bigint | null;
+  statementDay: number | null;
+  paymentDay: number | null;
+  annualFee: bigint | null;
+  annualFeeDate: string | null;
+  termsCurrency: string | null;
+  currency: string;
+};
+
+export function hasCreditTerms(card: Terms) {
+  return creditFields.some(field => card[field] !== null);
+}
+
+// The old schema denominated both amounts in the payment tool's currency.
+export function existingTermsCurrency(card: Terms) {
+  if (card.creditLimit === null && card.annualFee === null) return null;
+  return card.termsCurrency ?? card.currency;
+}

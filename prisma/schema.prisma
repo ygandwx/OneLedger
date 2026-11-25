@@ -77,6 +77,7 @@ model Card {
   replacementId  String?
   replacement    Card?           @relation("Replacement", fields: [replacementId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   replacedCards  Card[]          @relation("Replacement")
+  termsCurrency  String?
   creditLimit    BigInt?
   statementDay   Int?
   paymentDay     Int?

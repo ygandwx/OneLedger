@@ -1,14 +1,15 @@
+import type { Prisma } from "@prisma/client"
 import { db } from "@/lib/db"
 import { addDays, dateInMonth } from "@/lib/calendar"
 import { daysBetween, followingDue, repaymentDates } from "@/lib/recurrence-dates"
 
 export type DueEvent = { kind: string; id: string; date: string; title: string; entity: string; daysBefore: number; href: string }
-export async function dueEvents(today: string, horizon: number, forReminder = false): Promise<DueEvent[]> {
+export async function dueEvents(today: string, horizon: number, forReminder = false, reader: Prisma.TransactionClient = db): Promise<DueEvent[]> {
   const end = addDays(today, horizon)
   const [items, cards, files] = await Promise.all([
-    db.recurringItem.findMany({ where: { status: "有效", nextDue: { lte: end } }, include: { entity: true } }),
-    db.card.findMany({ where: { archived: false, status: { notIn: ["已注销","停用"] } }, include: { entity: true } }),
-    db.storedFile.findMany({ where: { archived: false, expiresOn: { gte: today, lte: end } }, include: { entity: true } }),
+    reader.recurringItem.findMany({ where: { status: "有效", nextDue: { lte: end } }, include: { entity: true } }),
+    reader.card.findMany({ where: { archived: false, status: { notIn: ["已注销","停用"] } }, include: { entity: true } }),
+    reader.storedFile.findMany({ where: { archived: false, expiresOn: { gte: today, lte: end } }, include: { entity: true } }),
   ])
   const result: DueEvent[] = []
   function push(kind: string, id: string, date: string, title: string, entity: string, href: string, leads = [7, 1]) {
@@ -33,7 +34,7 @@ export async function dueEvents(today: string, horizon: number, forReminder = fa
         push("信用卡还款", card.id, date, card.name + " · 还款", card.entity.name, "/records?tab=cards&edit=" + card.id)
       }
     }
-    if (card.annualFeeDate) {
+    if (card.type === "信用卡" && card.annualFeeDate) {
       const [firstYear, m, d] = card.annualFeeDate.split("-").map(Number)
       for (let y = Math.max(Number(today.slice(0,4)), firstYear); y <= Number(end.slice(0,4)); y++)
         push("年费", card.id, dateInMonth(y, m, d), card.name + " · 年费", card.entity.name, "/records?tab=cards&edit=" + card.id)

@@ -37,7 +37,9 @@ export async function saveRecurring(form: FormData) {
     const site = await db.website.findUnique({ where: { id: websiteId } })
     if (!site || (site.archived && old?.websiteId !== websiteId)) invalid("请选择可用网站", id)
   }
-  const amountText = field(form,"amount"), currency = field(form,"currency") || null
+  const amountText = field(form,"amount")
+  // Snapshot the monetary unit once an amount is stored. A reminder with no amount may follow the subject's current default.
+  const currency = field(form,"currency") || (amountText ? field(form,"displayedDefault") || entity.currency : null)
   if (currency && !isCurrency(currency)) invalid("币种无效", id)
   let amount: bigint | null = null
   if (amountText) {

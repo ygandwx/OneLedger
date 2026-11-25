@@ -16,3 +16,16 @@
 .tabs a[aria-current="page"] {
   font-weight: 650;
 }
+
+.rowActions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: .65rem;
+  white-space: nowrap;
+}
+.deleteLink {
+  color: #993d32;
+}
+.deleteButton {
+  background: #8f332a;
+}

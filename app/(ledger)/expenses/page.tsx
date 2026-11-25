@@ -61,6 +61,8 @@ export default async function Expenses({ searchParams }: { searchParams: Promise
         e.date, <span key="site">{e.website?.name ?? "—"}<br/><small>{e.account?.identifier}</small></span>,
         <span key="entity">{e.payer.name}<br/><small>{e.owner.name}</small></span>, e.card?.name ?? "—", e.category.name,
         <span key="amount">{e.bookedCurrency} {fromMinor(e.bookedAmount + e.fee, e.bookedCurrency)}
+          {(e.originalCurrency !== e.bookedCurrency || e.originalAmount !== e.bookedAmount) &&
+            <><br/><small>原币 {e.originalCurrency} {fromMinor(e.originalAmount, e.originalCurrency)}</small></>}
           {e.fee !== 0n && <><br/><small>含手续费 {fromMinor(e.fee, e.bookedCurrency)}</small></>}</span>,
         e.status, <ExpenseActions key={e.id} id={e.id} editable={!e.refundOfId && !e._count.refunds} refundable={e.status === "已入账" && !e.refundOfId && !e._count.refunds} />,
       ])} />

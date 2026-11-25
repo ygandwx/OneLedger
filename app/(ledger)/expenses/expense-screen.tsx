@@ -16,7 +16,7 @@ export async function ExpenseScreen({ id, copy }: { id?: string; copy?: boolean 
   if (id && source && (source.refundOfId || source._count.refunds)) return <section className="panel"><h1>关联退款</h1><p>请在支出列表移除退款后再编辑原支出。</p><Link href="/expenses">返回支出列表</Link></section>;
   const keep = (existingId?: string | null) => ({ OR: [{ archived: false }, ...(id && existingId ? [{ id: existingId }] : [])] });
   const [entities, websites, cards, accounts, categories, recurring, history] = await Promise.all([
-    db.entity.findMany({ where: { OR: [{ archived: false }, { id: { in: id && source ? [source.ownerId, source.payerId] : [] } }] }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    db.entity.findMany({ where: { OR: [{ archived: false }, { id: { in: id && source ? [source.ownerId, source.payerId] : [] } }] }, orderBy: { name: "asc" }, select: { id: true, name: true, currency: true } }),
     db.website.findMany({ where: keep(source?.websiteId), orderBy: { name: "asc" }, select: { id: true, name: true } }),
     db.card.findMany({ where: keep(source?.cardId), orderBy: { name: "asc" }, select: { id: true, name: true, entityId: true, currency: true, status: true, last4: true } }),
     db.account.findMany({ where: keep(source?.accountId), orderBy: { identifier: "asc" }, include: { website: true, entity: true,
@@ -48,6 +48,6 @@ export async function ExpenseScreen({ id, copy }: { id?: string; copy?: boolean 
   return <><div className="actions"><Link href="/expenses">返回支出记录</Link></div>
     <h1>{id ? "编辑支出" : copy ? "复制上一条支出" : "记一笔支出"}</h1>
     {(!entities.length || !cards.length || !websites.length) && <p className="notice">首次录入前，请先在<Link href="/records">基础资料</Link>中添加主体、网站和支付工具。</p>}
-    <ExpenseEditor id={id ?? null} initial={initial} options={options} generated={Boolean(id && source?.recurringId)} />
+    <ExpenseEditor id={id ?? null} initial={initial} options={options} preserveCurrencies={Boolean(source)} generated={Boolean(id && source?.recurringId)} />
   </>;
 }

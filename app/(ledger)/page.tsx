@@ -36,11 +36,12 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       <DataTable headers={["交易日期","扣款项目","归属主体","实际入账金额与操作"]} rows={charges.map(e => [
         e.date, <a key="expense" href={"/expenses/"+e.id}>{e.recurring?.title || e.website?.name || e.notes || "支出明细"}</a>, e.owner.name,
         <form key="review" action={reviewCharge} className="actions"><input type="hidden" name="id" value={e.id}/>
-          <label>{e.bookedCurrency}<input aria-label="实际入账金额" size={9} inputMode="decimal" name="amount" defaultValue={fromMinor(e.bookedAmount,e.bookedCurrency)}/></label>
-          <button name="result" value="confirm">确认入账</button><button name="result" value="skip" className="secondary">未扣款</button></form>,
+          <input type="hidden" name="bookedCurrency" value={e.bookedCurrency}/>
+          <label>入账金额（{e.bookedCurrency}）<input aria-label="实际入账金额" size={9} inputMode="decimal" name="amount" defaultValue={fromMinor(e.bookedAmount,e.bookedCurrency)}/></label>
+          <button name="result" value="confirm">确认入账</button><button name="result" value="skip" className="secondary">未扣款</button><a href={"/expenses/"+e.id}>调整币种与手续费</a></form>,
       ])}/></section>
     <section className="panel"><h2>未来 30 天到期</h2><DataTable headers={["到期日","事项","所属主体","类型"]} rows={due.map(e => [e.date,
-      <a key="open" href={e.href}>{e.title}</a>, e.entity, e.kind])}/></section>
+      <a key="open" href={e.href}>{e.title}</a>, e.entity, e.kind === "卡片到期" ? "支付工具到期" : e.kind])}/></section>
     <section className="panel"><h2>仍有绑定的异常支付工具</h2><DataTable headers={["支付工具","所属主体","状态","当前账号","有效订阅"]} rows={cards.map(c => [
       <a key="replace" href={"/records?tab=cards&edit="+c.id}>{c.name}</a>,c.entity.name,c.archived ? "已归档" : c.status,c._count.bindings,c._count.recurringItems])}/></section>
   </>

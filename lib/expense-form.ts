@@ -10,7 +10,7 @@ export type ExpenseDraft = {
 
 export type Option = { id: string; name: string };
 export type ExpenseOptions = {
-  websites: Option[]; entities: Option[]; categories: Option[]; recurring: Option[];
+  websites: Option[]; entities: (Option & { currency: string })[]; categories: Option[]; recurring: Option[];
   cards: (Option & { entityId: string; currency: string })[];
   accounts: (Option & { websiteId: string; entityId: string; cardId: string; lastCategoryId: string })[];
 };

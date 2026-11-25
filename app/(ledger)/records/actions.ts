@@ -1,12 +1,13 @@
 "use server";
 
-import { Prisma } from "@prisma/client";
+import { Prisma, type Card } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
-import { cardStatuses, cardTypes, accountStatuses, currencies, recordType, type RecordType } from "@/lib/records";
+import { existingTermsCurrency, hasCreditTerms, creditFields, cardStatuses, cardTypes, accountStatuses, currencies, recordType, recordTypes, type RecordType } from "@/lib/records";
 import { toMinor } from "@/lib/money";
+import { describeReferences, recordReferences, wouldLoseBindingHistory } from "@/lib/record-references";
 
 type Tx = Prisma.TransactionClient;
 class InvalidRecord extends Error {}
@@ -83,11 +84,25 @@ async function save(tx: Tx, tab: RecordType, id: string, data: FormData) {
     if (last4 && !/^\d{4}$/.test(last4)) throw new InvalidRecord("卡号后四位须为四位数字");
     const entityId = val("entityId");
     if (old?.entityId !== entityId) await tx.entity.findFirstOrThrow({where:{id:entityId,archived:false}});
+    const type = choice(val("type"), cardTypes);
+    const unit = (old && existingTermsCurrency(old)) || currency;
+    let terms: Partial<Pick<Card, typeof creditFields[number] | "termsCurrency">> = {};
+    if (type === "信用卡") {
+      if (old && old.type !== "信用卡" && hasCreditTerms(old) && val("reviewTerms") !== "on") {
+        throw new InvalidRecord("请核对原有额度、费用及提醒日期，再启用信用卡条款");
+      }
+      if (val("termsUnit") && val("termsUnit") !== unit) throw new InvalidRecord("额度和年费的计价币种已变更，请重新核对金额");
+      const creditLimit = amount(val("creditLimit"), unit);
+      const annualFee = amount(val("annualFee"), unit);
+      terms = { creditLimit, annualFee, termsCurrency: creditLimit === null && annualFee === null ? null : unit,
+        statementDay: day(val("statementDay")), paymentDay: day(val("paymentDay")), annualFeeDate: date(val("annualFeeDate")) };
+    } else if (creditFields.some(field => val(field) !== "")) {
+      throw new InvalidRecord("信用额度、账单日、还款日和年费仅适用于信用卡");
+    }
     const row = {
-      name:required(name, "支付工具昵称"), type:choice(val("type"), cardTypes), entityId, issuer:val("issuer"),
+      name:required(name, "支付工具昵称"), type, entityId, issuer:val("issuer"),
       currency, last4, expiresOn:date(val("expiresOn")), status:choice(val("status"), cardStatuses),
-      statementDay:day(val("statementDay")), paymentDay:day(val("paymentDay")), annualFeeDate:date(val("annualFeeDate")),
-      annualFee:amount(val("annualFee"),currency), creditLimit:amount(val("creditLimit"),currency), notes,
+      ...terms, notes,
     };
     if (old && old.status !== row.status) await tx.cardStatusLog.create({data:{cardId:id,oldStatus:old.status,newStatus:row.status,reason:val("reason")}});
     return id ? tx.card.update({where:{id},data:row}) : tx.card.create({data:row});
@@ -109,11 +124,19 @@ async function save(tx: Tx, tab: RecordType, id: string, data: FormData) {
     throw new InvalidRecord("此账号在该期间已有绑卡记录。请先结束旧绑定或调整日期");
   }
   const row = {accountId,cardId,startDate,endDate};
+  if (old && await wouldLoseBindingHistory(tx,old,row)) throw new InvalidRecord("变更会移除已有支出的绑卡历史，请保留原账号、支付工具和使用日期");
   return id ? tx.binding.update({where:{id},data:row}) : tx.binding.create({data:row});
 }
 
 function today() {
   return new Intl.DateTimeFormat("en-CA",{timeZone:process.env.TZ || "Asia/Shanghai",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+}
+
+async function closeBinding(tx: Tx, binding: {id:string; accountId:string; cardId:string; startDate:string; endDate:string | null}, endDate:string) {
+  if (await wouldLoseBindingHistory(tx,binding,{...binding,endDate})) {
+    throw new InvalidRecord("此绑定已有结束日后的支出，请核对交易日期后再结束绑定");
+  }
+  await tx.binding.update({where:{id:binding.id,endDate:null},data:{endDate}});
 }
 
 async function replace(tx: Tx, id: string, newId: string) {
@@ -123,7 +146,7 @@ async function replace(tx: Tx, id: string, newId: string) {
   const effective = today();
   const bindings = await tx.binding.findMany({where:{cardId:id,endDate:null}});
   for (const binding of bindings) {
-    await tx.binding.update({where:{id:binding.id},data:{endDate:effective}});
+    await closeBinding(tx,binding,effective);
     await tx.binding.create({data:{cardId:newId,accountId:binding.accountId,startDate:effective}});
   }
   await tx.recurringItem.updateMany({where:{cardId:id,type:"订阅",status:"有效"},data:{cardId:newId}});
@@ -142,15 +165,18 @@ async function archive(tx: Tx, tab: RecordType, id: string, archived: boolean) {
 }
 
 async function remove(tx: Tx, tab: RecordType, id: string) {
+  const references = describeReferences(await recordReferences(tx,tab,id));
+  if (references) throw new InvalidRecord("已有" + references + "，请保留关联历史。");
   const where = { id };
   switch (tab) {
-    case "entities": return tx.entity.delete({ where });
-    case "websites": return tx.website.delete({ where });
-    case "accounts": return tx.account.delete({ where });
-    case "bindings": return tx.binding.delete({ where });
-    case "cards":
-      if (await tx.notification.count({where:{itemId:id}})) throw new InvalidRecord("该支付工具已有提醒记录，请使用归档");
-      return tx.card.delete({ where });
+    case "entities": return (await tx.entity.delete({ where })).name;
+    case "websites": return (await tx.website.delete({ where })).name;
+    case "accounts": return (await tx.account.delete({ where })).identifier;
+    case "bindings": {
+      const row = await tx.binding.delete({ where, include: { account: true, card: true } });
+      return row.account.identifier + " → " + row.card.name + "（" + row.startDate + "）";
+    }
+    case "cards": return (await tx.card.delete({ where })).name;
   }
 }
 
@@ -165,10 +191,11 @@ export async function editRecord(data: FormData) {
       } else if (op === "archive" || op === "restore") {
         await archive(tx,tab,id,op === "archive"); message = op === "archive" ? "已归档" : "已恢复"; edit = tab === "cards" ? id : "";
       } else if (op === "end" && tab === "bindings") {
-        await tx.binding.update({where:{id,endDate:null},data:{endDate:today()}}); message = "已结束绑定"; edit = "";
+        const binding = await tx.binding.findUniqueOrThrow({where:{id,endDate:null}});
+        await closeBinding(tx,binding,today()); message = "已结束绑定"; edit = "";
       } else if (op === "delete") {
-        if (field(data,"confirm") !== "on") throw new InvalidRecord("请勾选确认删除");
-        await remove(tx,tab,id); message = "已删除"; edit = "";
+        if (field(data,"confirm") !== "delete") throw new InvalidRecord("请先确认要删除的记录");
+        const name = await remove(tx,tab,id); message = "已删除" + recordTypes[tab] + "「" + name + "」"; edit = "";
       } else if (op === "save") {
         const changed = await save(tx,tab,id,data); edit = tab === "cards" ? changed.id : "";
       } else throw new InvalidRecord("无效操作");
@@ -180,6 +207,7 @@ export async function editRecord(data: FormData) {
   }
   revalidatePath("/", "layout");
   const params = new URLSearchParams({tab,[error ? "error" : "notice"]:message});
-  if (edit || error) params.set("edit", edit || "new");
+  if (edit || error) params.set(error && op === "delete" ? "remove" : "edit", edit || "new");
+  if (field(data,"archived") === "1") params.set("archived","1");
   redirect("/records?" + params);
 }
